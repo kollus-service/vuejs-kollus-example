@@ -7,6 +7,13 @@ export default {
       "https://file.kollus.com/vgcontroller/vg-controller-client.latest.min.js"
     );
     document.head.appendChild(vgControllerScript);
+
+    const kollusChattingSDKScript = document.createElement("script");
+    kollusChattingSDKScript.setAttribute(
+      "src",
+      "https://file.kollus.com/kollusChatting/sdk/KOLLUS_CHATTING_SDK.latest.js"
+    );
+    document.head.appendChild(kollusChattingSDKScript);
     
     window.onload = () => {
       this.initVgController();
@@ -20,11 +27,83 @@ export default {
         target_window: document.querySelector('#kollus-player').contentWindow
       });
 
+      // SDK Object - 서버 연결/종료 Methods
+      const initConnectionControllers = (sdk) => {
+        sdk.startConnection();
+      }
+
       // Ready Listener
       // 자세한 설명은 https://catenoid-support.atlassian.net/wiki/spaces/SUP/pages/3312250/V+G+Controller 를 참고하세요.
       controller.on('ready', function () {
         console.log('vg controller ready');
+        console.log("KOLLUS_CHATTING_SDK", KOLLUS_CHATTING_SDK);
+        const sdk = KOLLUS_CHATTING_SDK.getKollusSDK(controller);
+
+        console.log("sdk", sdk);
+
+        try {
+          const config = sdk.getConfig();
+
+          // SDK Object - Event 등록
+          sdk.on('join', function(msg) {
+              // Event Result - 최대 30개의 최근 메시지 표시
+              if (msg.length > 0) {
+                  for (var i=0; i < msg.length; i++) {
+                      appendPrevChatMsg(msg[i]);
+                  }
+              }
+
+              // Join 이후 받을 수 있는 동일한 Config 값들 (Join 이전부터 받을 수 있는 값들은 SDK Document 참조)
+              showJoinInfo(config);
+          });
+
+          // SDK Object - Event 등록
+          sdk.on('chat', function(msg) {
+              appendChatMsg(msg, config.isAdmin(), config.getUserID(), config.blockFeatureEnabled(), userId => sdk.blockUserByAdmin(userId));
+          });
+
+          // SDK Object - Event 등록
+          sdk.on('blocked', function(userId) {
+              console.log("Blocked: " + userId);
+          });
+
+          // SDK Object - 서버 연결/종료 설정
+          initConnectionControllers(sdk);
+          
+          // SDK Object - Event 등록
+          sdk.on('connect_status', function(status, retryCount) {
+              appendConnectStatus(status, retryCount);
+
+              const connect_available = status === 'disconnected' || status === 'disconnected_exceed';
+              const disconnect_available = !connect_available;
+
+              configureConnectControllers(connect_available, disconnect_available);
+
+              if (status === 'disconnected' || status === 'disconnected_exceed') {
+                  configurePlayerController(true);
+                  showJoinInfo(null);
+                  updateStatus(null);
+                  document.getElementById('prev_chat_msgs').innerHTML = '';
+                  document.getElementById('chat_msgs').innerHTML = '';
+              }
+          });
+
+          // SDK Object - Event 등록
+          sdk.on('status', function(status) {
+              updateStatus(status);
+          });
+
+          // SDK Object - Event 등록
+          sdk.on('nickname_changed', function(nickname) {
+              alert(`닉네임이 ${nickname} 으로 설정되었습니다.`);
+
+              showJoinInfo(sdk.getConfig());
+          });
+      } catch(e) {
+          alert(e);
+      }
       });
+
     }
   },
 }
